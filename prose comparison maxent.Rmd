@@ -1,0 +1,126 @@
+---
+title: "Maxent prose comparison"
+author: "Aljosa Milenkovic, Kevin Ryan"
+output: pdf_document
+date: "2025-09-05"
+---
+
+
+```{r, tidy=TRUE, tidy.opts=list(width.cutoff=75)}
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(knitr)
+library(kableExtra)
+library(maxent.ot)
+
+# Henriksson 2022-style analysis with Gaussian priors (Section 6.4)
+
+#################
+# Henriksson 2022-style analysis with Gaussian priors
+library(dplyr)
+library(tidyr)
+library(maxent.ot)
+
+prose <- read.csv("prose check.csv", header = TRUE)
+prose <- prose[ , c(2:9)]
+
+epic <- read.csv("epic check.csv", header = TRUE)
+epic <- epic[ , c(2:9)]
+
+# fits baseline model (to prose data)
+model_prose <- optimize_weights(prose, mu = 0, sigma = 100, upper_bound = 10)
+
+# creates tibble with constraints and their weights
+model_prose_weights <- enframe(model_prose$weights, name = "constraint", value = "weight_baseline_model")
+
+# fits full epic model
+full_model <- optimize_weights(epic, mu = 0, sigma = 100)
+
+# creates tibble with constraints and their weights
+full_model_weights <- enframe(full_model$weights, name = "constraint", value = "weight_full_model")
+
+# creates tibble with epic vs. prose weights
+epic_vs_prose <- right_join(full_model_weights, model_prose_weights, copy = FALSE) %>%
+  mutate(weight_difference = weight_full_model - weight_baseline_model)
+
+# returns LaTeX table with constraint weights in full and baseline models and weight difference
+kable(epic_vs_prose, format = "latex", booktabs = FALSE, caption = "Constraint weights in the epic vs.\ prose model")
+
+epic_v1 <- epic
+
+# Heavy=>Strong: baseline weight as prior 
+prior_hvy_s <- optimize_weights(epic_v1, mu = c(.764, 0, 0, 0, 0), sigma = c(.01, 100, 100, 100, 100))
+
+hvy_s_comparison <- compare_models(full_model, prior_hvy_s, method = "bic")
+
+hvy_s_comparison %>%
+  dplyr::select(model, bic.delta) %>%
+  pivot_wider(names_from = "model", values_from = "bic.delta") %>%
+  mutate(delta_bic = epic_v1 - epic) %>%
+  mutate(constraint = "heavy_strong") %>%
+  dplyr::select(constraint, delta_bic) -> hvy_s
+
+# Stress=>(Heavy=>Strong): baseline weight as prior 
+prior_str_hvy_s <- optimize_weights(epic_v1, mu = c(0, .185, 0, 0, 0), sigma = c(100, .01, 100, 100, 100))
+
+str_hvy_s_comparison <- compare_models(full_model, prior_str_hvy_s, method = "bic")
+
+str_hvy_s_comparison %>%
+  dplyr::select(model, bic.delta) %>%
+  pivot_wider(names_from = "model", values_from = "bic.delta") %>%
+  mutate(delta_bic = epic_v1 - epic) %>%
+  mutate(constraint = "stress_heavy_strong") %>%
+  dplyr::select(constraint, delta_bic) -> str_hvy_s
+
+# Stress=>(Strong=>Heavy)_cadence: baseline weight as prior 
+prior_str_s_hvy_cad <- optimize_weights(epic_v1, mu = c(0, 0, .768, 0, 0), sigma = c(100, 100, .01, 100, 100))
+
+str_s_hvy_cad_comparison <- compare_models(full_model, prior_str_s_hvy_cad, method = "bic")
+
+str_s_hvy_cad_comparison %>%
+  dplyr::select(model, bic.delta) %>%
+  pivot_wider(names_from = "model", values_from = "bic.delta") %>%
+  mutate(delta_bic = epic_v1 - epic) %>%
+  mutate(constraint = "stressed_strongheavy_cadence") %>%
+  dplyr::select(constraint, delta_bic) -> str_s_hvy_cad
+
+# Heavy=>Strong_cadence: baseline weight as prior 
+prior_hvy_s_cad <- optimize_weights(epic_v1, mu = c(0, 0, 0, .14, 0), sigma = c(100, 100, 100, .01, 100))
+
+hvy_s_cad_comparison <- compare_models(full_model, prior_hvy_s_cad, method = "bic")
+
+hvy_s_cad_comparison %>%
+  dplyr::select(model, bic.delta) %>%
+  pivot_wider(names_from = "model", values_from = "bic.delta") %>%
+  mutate(delta_bic = epic_v1 - epic) %>%
+  mutate(constraint = "heavy_strong_cadence") %>%
+  dplyr::select(constraint, delta_bic) -> hvy_s_cad
+
+# Stress=>(High=>Strong): baseline weight as prior 
+prior_str_high_s <- optimize_weights(epic_v1, mu = c(0, 0, 0, 0, .842), sigma = c(100, 100, 100, 100, .01))
+
+str_high_s_comparison <- compare_models(full_model, prior_str_high_s, method = "bic")
+
+str_high_s_comparison %>%
+  dplyr::select(model, bic.delta) %>%
+  pivot_wider(names_from = "model", values_from = "bic.delta") %>%
+  mutate(delta_bic = epic_v1 - epic) %>%
+  mutate(constraint = "stress_high_strong") %>%
+  dplyr::select(constraint, delta_bic) -> str_high_s
+
+# creates a table with constraints and their delta_bic values
+delta_bic <- rbind(hvy_s,str_hvy_s,str_s_hvy_cad,hvy_s_cad,str_high_s)
+
+# adds delta_bic column to the epic_vs_prose table
+epic_vs_prose <- right_join(epic_vs_prose, delta_bic, copy = FALSE) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 2)))
+
+# creates latex table
+table2 <- kable(epic_vs_prose, format = "latex", booktabs = FALSE, caption = "Constraint weights in the epic vs.\ prose model (BIC comparison)")
+table2
+
+# saves table as LaTeX code
+save_kable(table2, "table prose baseline.tex")
+```
